@@ -4,25 +4,25 @@
 const shuffle = require('knuth-shuffle').knuthShuffle;
 const plot = require('plotter').plot; //https://github.com/richardeoin/nodejs-plotter
 const assert = require('assert');
+const Promise = require('bluebird');
+Promise.longStackTraces(); //debug
 
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 const evaluate = (data, func) => {
-    var result = [];
-    data.forEach((item) => {
-        result.push([item, func(item)]);
-    });
-    return result;
+    return Promise.all(data.map((i) => {
+        return [i, func(i)];
+    }));
 }
 
-var topResult = [0,-1000];
+var topResult = [0, -1000];
 const discard = (data, func) => {
     //пока просто соритурем, потом можно будет заменить на что то поинтереснее
     data.sort(func);
-    if (func(data[0],topResult) < func(topResult, data[0])){
-      topResult = data[0];
+    if (func(data[0], topResult) < func(topResult, data[0])) {
+        topResult = data[0];
     }
     data.splice(-1 * data.length / 2, data.length / 2);
     data = data.map((item) => {
@@ -50,59 +50,8 @@ const comparator = (a, b) => {
     return b[1] - a[1]; //сортируем по убыванию
 }
 
-const cr = (a, b) => {
-    return (a + b) / 2;
-}
-
-const mut = (item) => {
-    return item + (getRandomInt(-3, 3));
-}
-
-var a = [];
-for (var i = 0; i < 200; i++) {
-    a.push(getRandomInt(-30, 30));
-}
-const test = (item) => {
-    return -1 * Math.pow(item, 2) + 10 - Math.sin(Math.pow(item, 2));
-}
-var counter = 0;
-var plotData = {};
-
-const test2D = (data, count) => {
-    var ndata = mutation(crossover(discard(evaluate(data, test), comparator), cr), mut);
-    assert(data.length == ndata.length);
-    plotData[counter] = ndata.reduce((total, item) => {
-        total[item] = test(item);
-        return total;
-    }, {});
-    if (counter < count) {
-        counter++;
-        return test2D(ndata, count);
-    } else {
-        return ndata;
-    }
-}
-
-var result = test2D(a, 100);
-result.sort(comparator);
-var textResult = `Result is ${result[0]}, top result is ${topResult[0]}`;
-console.log(textResult);
-
-var isWin = /^win/.test(process.platform);
-if (!isWin) {
-    plot({
-        data: plotData,
-        title: textResult,
-        style: 'points',
-        nokey: true,
-        filename: 'output.png',
-        format: 'png'
-    });
-}
-
-//3d
 const cr3d = (a, b) => {
-    return [(a[0] + b[0]) / 2 ,(a[1] + b[1]) / 2];
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
 const mut3d = (item) => {
@@ -116,26 +65,51 @@ for (var i = 0; i < 200; i++) {
 const test3d = (item) => {
     return -1 * (3 * Math.pow(item[0], 2) + item[0] * item[1] + 2 * Math.pow(item[1], 2) - item[0] - 4 * item[1]);
 }
-var counter3d = 0;
-var plotData3d = {};
-topResult = [[0,0],-1000];
+topResult = [
+    [0, 0], -1000
+];
 
-const test3D = (data, count) => {
-    var ndata = mutation(crossover(discard(evaluate(data, test3d), comparator), cr3d), mut3d);
-    assert(data.length == ndata.length);
-    plotData3d[counter] = ndata.reduce((total, item) => {
-        total[item] = test(item);
-        return total;
-    }, {});
-    if (counter3d < count) {
-        counter3d++;
-        return test3D(ndata, count);
-    } else {
-        return ndata;
-    }
+const func3D = (data, count, plotData) => {
+    return new Promise((resolve) => {
+        if (typeof(plotData) == 'undefined') {
+            plotData = {};
+        }
+        evaluate(data, test3d).then((edata) => {
+            var ndata = mutation(crossover(discard(edata, comparator), cr3d), mut3d);
+            assert(data.length == ndata.length);
+            plotData[count] = ndata.reduce((total, item) => {
+                total[item] = test3d(item);
+                return total;
+            }, {});
+            if (count > 0) {
+                count--;
+                func3D(ndata, count, plotData).then(resolve);
+            } else {
+                resolve({data:ndata, polt:plotData});
+            }
+        });
+    });
 }
 
-var result3d = test3D(data3d, 200);
-result3d.sort(comparator);
-var textResult3d = `Result 3d is ${result3d[0]}, top result is ${topResult[0]}`;
-console.log(textResult3d);
+func3D(data3d, 20).then((res) => {
+    var result = res['data'];
+    var plotData = res['polt'];
+    result.sort(comparator);
+    var textResult3d = `Result 3d is ${result[0]}, top result is ${topResult[0]}, ${plotData}`;
+    console.log(textResult3d);
+    var isWin = /^win/.test(process.platform);
+    if (!isWin) {
+        plot({
+            data: plotData3d,
+            title: textResult,
+            style: 'points',
+            nokey: true,
+            filename: 'output.png',
+            format: 'png'
+        });
+    }
+});
+//var result3d = func3D(data3d, 200);
+//result3d.sort(comparator);
+//var textResult3d = `Result 3d is ${result3d[0]}, top result is ${topResult[0]}`;
+//console.log(textResult3d);
