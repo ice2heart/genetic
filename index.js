@@ -12,17 +12,18 @@ function getRandomInt(min, max) {
 }
 
 const evaluate = (data, func) => {
+  //более красивое апи,
     return Promise.all(data.map((i) => {
-        return [i, func(i)];
+        return func(i);
     }));
 }
 
-var topResult = [0, -1000];
-const discard = (data, func) => {
+const discard = (data, func, top) => {
     //пока просто соритурем, потом можно будет заменить на что то поинтереснее
     data.sort(func);
-    if (func(data[0], topResult) < func(topResult, data[0])) {
-        topResult = data[0];
+    //console.log(func(data[0], top) < func(top, data[0]), func(data[0], top), func(top, data[0]), top, data[0]);
+    if (func(data[0], top['data']) < func(top['data'], data[0])) {
+        top['data'] = data[0];
     }
     data.splice(-1 * data.length / 2, data.length / 2);
     data = data.map((item) => {
@@ -63,19 +64,21 @@ for (var i = 0; i < 200; i++) {
     data3d.push([getRandomInt(-30, 30), getRandomInt(-30, 30)]);
 }
 const test3d = (item) => {
-    return -1 * (3 * Math.pow(item[0], 2) + item[0] * item[1] + 2 * Math.pow(item[1], 2) - item[0] - 4 * item[1]);
+  return new Promise((resolve) =>{
+    resolve( [item ,-1 * (3 * Math.pow(item[0], 2) + item[0] * item[1] + 2 * Math.pow(item[1], 2) - item[0] - 4 * item[1])]);
+  });
 }
-topResult = [
-    [0, 0], -1000
-];
 
-const func3D = (data, count, plotData) => {
+const func3D = (data, count, plotData, top) => {
     return new Promise((resolve) => {
         if (typeof(plotData) == 'undefined') {
             plotData = {};
         }
+        if (typeof(top) == 'undefined') {
+          top = {data:[[0,0], -1000]};
+        }
         evaluate(data, test3d).then((edata) => {
-            var ndata = mutation(crossover(discard(edata, comparator), cr3d), mut3d);
+            var ndata = mutation(crossover(discard(edata, comparator, top), cr3d), mut3d);
             assert(data.length == ndata.length);
             plotData[count] = ndata.reduce((total, item) => {
                 total[item] = test3d(item);
@@ -83,9 +86,9 @@ const func3D = (data, count, plotData) => {
             }, {});
             if (count > 0) {
                 count--;
-                func3D(ndata, count, plotData).then(resolve);
+                func3D(ndata, count, plotData, top).then(resolve);
             } else {
-                resolve({data:ndata, polt:plotData});
+                resolve({data:ndata, polt:plotData, top:top});
             }
         });
     });
@@ -95,10 +98,9 @@ func3D(data3d, 20).then((res) => {
     var result = res['data'];
     var plotData = res['polt'];
     result.sort(comparator);
-    var textResult3d = `Result 3d is ${result[0]}, top result is ${topResult[0]}, ${plotData}`;
+    var textResult3d = `Result 3d is ${result[0]}, top result is ${res.top.data[0]}, ${plotData}`;
     console.log(textResult3d);
-    var isWin = /^win/.test(process.platform);
-    if (!isWin) {
+    if (!/^win/.test(process.platform)) {
         plot({
             data: plotData3d,
             title: textResult,
@@ -109,7 +111,3 @@ func3D(data3d, 20).then((res) => {
         });
     }
 });
-//var result3d = func3D(data3d, 200);
-//result3d.sort(comparator);
-//var textResult3d = `Result 3d is ${result3d[0]}, top result is ${topResult[0]}`;
-//console.log(textResult3d);
