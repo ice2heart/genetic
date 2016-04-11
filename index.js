@@ -2,94 +2,112 @@
 //sudo aptitude install gnuplot
 
 const shuffle = require('knuth-shuffle').knuthShuffle;
-const plot = require('plotter').plot;  //https://github.com/richardeoin/nodejs-plotter
+const plot = require('plotter').plot; //https://github.com/richardeoin/nodejs-plotter
 const assert = require('assert');
+const Promise = require('bluebird');
+Promise.longStackTraces(); //debug
 
 function getRandomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 const evaluate = (data, func) => {
-  var result = [];
-  data.forEach((item) => {
-    result.push([item, func(item)]);
-  });
-  return result;
+  //более красивое апи,
+    return Promise.all(data.map((i) => {
+        return func(i);
+    }));
 }
 
-const discard = (data, func) => {
-  //пока просто соритурем, потом можно будет заменить на что то поинтереснее
-  data.sort(func);
-  data.splice(-1 * data.length / 2, data.length / 2);
-  data = data.map((item) => {
-    return item[0];
-  })
-  return data;
+const discard = (data, func, top) => {
+    //пока просто соритурем, потом можно будет заменить на что то поинтереснее
+    data.sort(func);
+    //console.log(func(data[0], top) < func(top, data[0]), func(data[0], top), func(top, data[0]), top, data[0]);
+    if (func(data[0], top['data']) < func(top['data'], data[0])) {
+        top['data'] = data[0];
+    }
+    data.splice(-1 * data.length / 2, data.length / 2);
+    data = data.map((item) => {
+        return item[0];
+    })
+    return data;
 }
 
 const crossover = (data, func) => {
-  var child = [];
-  data.forEach((item) => {
-    child.push(func(item, data[getRandomInt(0, data.length - 1)]));
-  });
-  return data.concat(child);
+    var child = [];
+    data.forEach((item) => {
+        child.push(func(item, data[getRandomInt(0, data.length - 1)]));
+    });
+    return data.concat(child);
 }
 
 const mutation = (data, func) => {
-  shuffle(data);
-  var mdata = data.splice(-1 * data.length / 2, data.length / 2);
-  mdata = mdata.map(func);
-  return data.concat(mdata);
+    shuffle(data);
+    var mdata = data.splice(-1 * data.length / 2, data.length / 2);
+    mdata = mdata.map(func);
+    return data.concat(mdata);
 }
 
 const comparator = (a, b) => {
-  //  console.log(a, b);
-  return b[1] - a[1]; //сортируем по убыванию
+    return b[1] - a[1]; //сортируем по убыванию
 }
 
-const cr = (a, b) => {
-  return (a + b) / 2;
+const cr3d = (a, b) => {
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
-const mut = (item) => {
-  return item + (getRandomInt(-3, 3));
+const mut3d = (item) => {
+    return [item[0] + (getRandomInt(-3, 3)), item[1] + (getRandomInt(-3, 3))];
 }
 
-var a = [];
+var data3d = [];
 for (var i = 0; i < 200; i++) {
-  a.push(getRandomInt(-30, 30));
+    data3d.push([getRandomInt(-30, 30), getRandomInt(-30, 30)]);
 }
-const test = (item) => {
-  return -1 * Math.pow(item, 2) + 10 - Math.sin(Math.pow(item, 2));
-}
-var counter = 0;
-var plotData = {};
-
-const testC = (data, count) => {
-  var ndata = mutation(crossover(discard(evaluate(data, test), comparator), cr), mut);
-  assert(data.length == ndata.length);
-  plotData[counter] = ndata.reduce((total, item) => {
-    total[item] = test(item);
-    return total;
-  }, {});
-  if (counter < count) {
-    counter++;
-    return testC(ndata, count);
-  } else {
-    return ndata;
-  }
+const test3d = (item) => {
+  return new Promise((resolve) =>{
+    resolve( [item ,-1 * (3 * Math.pow(item[0], 2) + item[0] * item[1] + 2 * Math.pow(item[1], 2) - item[0] - 4 * item[1])]);
+  });
 }
 
-var result = testC(a, 10);
-result.sort(comparator);
-var textResult = `Result is ${result[0]}`;
-console.log(textResult);
-//console.log(plotData);
-plot({
-  data: plotData,
-  title: textResult,
-  style: 'points',
-  nokey: true,
-  filename: 'output.png',
-  format: 'png'
+const func3D = (data, count, plotData, top) => {
+    return new Promise((resolve) => {
+        if (typeof(plotData) == 'undefined') {
+            plotData = {};
+        }
+        if (typeof(top) == 'undefined') {
+          top = {data:[[0,0], -1000]};
+        }
+        evaluate(data, test3d).then((edata) => {
+            var ndata = mutation(crossover(discard(edata, comparator, top), cr3d), mut3d);
+            assert(data.length == ndata.length);
+            plotData[count] = ndata.reduce((total, item) => {
+                total[item] = test3d(item);
+                return total;
+            }, {});
+            if (count > 0) {
+                count--;
+                func3D(ndata, count, plotData, top).then(resolve);
+            } else {
+                resolve({data:ndata, polt:plotData, top:top});
+            }
+        });
+    });
+}
+
+func3D(data3d, 20).then((res) => {
+    var result = res['data'];
+    var plotData = res['polt'];
+    result.sort(comparator);
+    var textResult3d = `Result 3d is ${result[0]}, top result is ${res.top.data[0]}, ${plotData}`;
+    console.log(textResult3d);
+    if (!/^win/.test(process.platform)) {
+        plot({
+            data: plotData3d,
+            title: textResult,
+            style: 'points',
+            nokey: true,
+            filename: 'output.png',
+            format: 'png'
+        });
+    }
 });
