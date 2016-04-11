@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "amqp-rpc": "0.0.8",
     "bluebird": "^3.3.4",
     "knuth-shuffle": "^1.0.1",
     "plotter": "^0.5.0"
