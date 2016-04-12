@@ -41,14 +41,15 @@ const crossover = (data, func) => {
   data.forEach((item) => {
     child.push(func(item, data[getRandomInt(0, data.length - 1)]));
   });
-  return data.concat(child);
+  return [data, child];
 }
 
 const mutation = (data, func) => {
-  shuffle(data);
-  var mdata = data.splice(-1 * data.length / 2, data.length / 2);
-  mdata = mdata.map(func);
-  return data.concat(mdata);
+  var par = data[0];
+  var child = data[1];
+  shuffle(child);
+  var mdata = child.map(func);
+  return par.concat(mdata);
 }
 
 const comparator = (a, b) => {
@@ -56,11 +57,24 @@ const comparator = (a, b) => {
 }
 
 const cr3d = (a, b) => {
-  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  if (getRandomInt(0, 1)) {
+    if (getRandomInt(0, 1)) {
+      return [a[1], b[0]];
+    } else {
+      return [a[0], b[1]];
+    }
+  } else {
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  }
 }
 
 const mut3d = (item) => {
-  return [item[0] + (getRandomInt(-3, 3)), item[1] + (getRandomInt(-3, 3))];
+  if (getRandomInt(0, 1)) {
+    return item;
+  } else {
+    return [item[0] + (getRandomInt(-3, 3)), item[1] + (getRandomInt(-3, 3))];
+  }
+
 }
 
 var data3d = [];
@@ -72,7 +86,6 @@ const test3d = (item) => {
     rpc.call('func3d', item, function(msg) {
       resolve([item, msg]);
     });
-    //resolve([item, -1 * (3 * Math.pow(item[0], 2) + item[0] * item[1] + 2 * Math.pow(item[1], 2) - item[0] - 4 * item[1])]);
   });
 }
 
@@ -89,7 +102,9 @@ const func3D = (data, count, plotData, top) => {
       };
     }
     evaluate(data, test3d).then((edata) => {
+      //Меняем алгоритм. Добавляем 2 шага. Мутация происходит только для детей, и доп шаг с отсеиванием
       var ndata = mutation(crossover(discard(edata, comparator, top), cr3d), mut3d);
+      //console.log(top.data);
       assert(data.length == ndata.length);
       plotData[count] = ndata.reduce((total, item) => {
         total[item] = test3d(item);
